@@ -13,6 +13,8 @@
 #ifndef __OS_GENERIC_WIN_BASE__
 #define __OS_GENERIC_WIN_BASE__
 
+#include <os/generic_base.h>
+
 // Unices provide `roundup` via sys/param.h
 #define roundup(x, y) ((((x) + ((y) - 1)) / (y)) * (y))
 // Unices provide `MAX` via sys/param.h
@@ -22,16 +24,10 @@
 // Unices provide `howmany` via sys/param.h
 #define howmany(x, y)  (((x) + ((y) - 1)) / (y))
 
+#ifndef HAVE_MODE_T
 typedef int mode_t;
-typedef void pthread_attr_t;
-
-#if defined(__cplusplus)
-#define __BEGIN_DECLS extern "C" {
-#define __END_DECLS }
-#else
-#define __BEGIN_DECLS
-#define __END_DECLS
 #endif
+typedef void pthread_attr_t;
 
 #ifndef API_AVAILABLE
 #define API_AVAILABLE(...)

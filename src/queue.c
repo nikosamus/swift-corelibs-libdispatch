@@ -773,7 +773,7 @@ _dispatch_async_redirect_invoke(dispatch_continuation_t dc,
 {
 	dispatch_thread_frame_s dtf;
 	struct dispatch_continuation_s *other_dc = dc->dc_other;
-	dispatch_invoke_flags_t ctxt_flags = (dispatch_invoke_flags_t)dc->dc_ctxt;
+	dispatch_invoke_flags_t ctxt_flags = (dispatch_invoke_flags_t)(uintptr_t)dc->dc_ctxt;
 	// if we went through _dispatch_root_queue_push_override,
 	// the "right" root queue was stuffed into dc_func
 	dispatch_queue_global_t assumed_rq = (dispatch_queue_global_t)dc->dc_func;
@@ -6264,8 +6264,13 @@ _dispatch_worker_thread(void *context)
 static unsigned WINAPI
 _dispatch_worker_thread_thunk(LPVOID lpParameter)
 {
-  _dispatch_worker_thread(lpParameter);
-  return 0;
+	HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
+	if (FAILED(hr)) {
+		_dispatch_client_assert_fail("Error %ld initializing Windows Runtime", hr);
+	}
+	_dispatch_worker_thread(lpParameter);
+	CoUninitialize();
+	return 0;
 }
 #endif // defined(_WIN32)
 #endif // DISPATCH_USE_PTHREAD_POOL
@@ -6467,7 +6472,7 @@ _dispatch_runloop_handle_is_valid(dispatch_runloop_handle_t handle)
 {
 #if TARGET_OS_MAC
 	return MACH_PORT_VALID(handle);
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__unix__)
 	return handle >= 0;
 #elif defined(_WIN32)
 	return handle != NULL;
@@ -6485,6 +6490,8 @@ _dispatch_runloop_queue_get_handle(dispatch_lane_t dq)
 #elif defined(__linux__)
 	// decode: 0 is a valid fd, so offset by 1 to distinguish from NULL
 	return ((dispatch_runloop_handle_t)(uintptr_t)dq->do_ctxt) - 1;
+#elif defined(__unix__) && !defined(__linux__)
+	return ((dispatch_runloop_handle_t)(uintptr_t)dq->do_ctxt);
 #elif defined(_WIN32)
 	return ((dispatch_runloop_handle_t)(uintptr_t)dq->do_ctxt);
 #else
@@ -6502,12 +6509,20 @@ _dispatch_runloop_queue_set_handle(dispatch_lane_t dq,
 #elif defined(__linux__)
 	// encode: 0 is a valid fd, so offset by 1 to distinguish from NULL
 	dq->do_ctxt = (void *)(uintptr_t)(handle + 1);
+#elif defined(__unix__) && !defined(__linux__)
+	dq->do_ctxt = (void *)(uintptr_t)handle;
 #elif defined(_WIN32)
 	dq->do_ctxt = (void *)(uintptr_t)handle;
 #else
 #error "runloop support not implemented on this platform"
 #endif
 }
+
+#if defined(__unix__)
+#define DISPATCH_RUNLOOP_HANDLE_PACK(rfd, wfd) (((uint64_t)(rfd) << 32) | (wfd))
+#define DISPATCH_RUNLOOP_HANDLE_RFD(h) ((int)((h) >> 32))
+#define DISPATCH_RUNLOOP_HANDLE_WFD(h) ((int)((h) & 0xffffffff))
+#endif
 
 static void
 _dispatch_runloop_queue_handle_init(void *ctxt)
@@ -6558,6 +6573,14 @@ _dispatch_runloop_queue_handle_init(void *ctxt)
 		}
 	}
 	handle = fd;
+#elif defined(__unix__) && !defined(__linux__)
+	int fds[2];
+	int r = pipe2(fds, O_CLOEXEC | O_NONBLOCK);
+	if (r == -1) {
+		DISPATCH_CLIENT_CRASH(errno, "pipe2 failure");
+	}
+	uint32_t rfd = (uint32_t)fds[0], wfd = (uint32_t)fds[1];
+	handle = DISPATCH_RUNLOOP_HANDLE_PACK(rfd, wfd);
 #elif defined(_WIN32)
 	HANDLE hEvent;
 	hEvent = CreateEventW(NULL, /*bManualReset=*/FALSE,
@@ -6591,6 +6614,11 @@ _dispatch_runloop_queue_handle_dispose(dispatch_lane_t dq)
 	(void)dispatch_assume_zero(kr);
 #elif defined(__linux__)
 	int rc = close(handle);
+	(void)dispatch_assume_zero(rc);
+#elif defined(__unix__) && !defined(__linux__)
+	int rc = close(DISPATCH_RUNLOOP_HANDLE_WFD(handle));
+	(void)dispatch_assume_zero(rc);
+	rc = close(DISPATCH_RUNLOOP_HANDLE_RFD(handle));
 	(void)dispatch_assume_zero(rc);
 #elif defined(_WIN32)
 	BOOL bSuccess;
@@ -6628,6 +6656,13 @@ _dispatch_runloop_queue_class_poke(dispatch_lane_t dq)
 		result = eventfd_write(handle, 1);
 	} while (result == -1 && errno == EINTR);
 	(void)dispatch_assume_zero(result);
+#elif defined(__unix__) && !defined(__linux__)
+	int wfd = DISPATCH_RUNLOOP_HANDLE_WFD(handle);
+	ssize_t result;
+	do {
+		result = write(wfd, "x", 1);
+	} while (result == -1 && errno == EINTR);
+	(void)dispatch_assume_zero(result - 1);
 #elif defined(_WIN32)
 	BOOL bSuccess;
 	bSuccess = SetEvent(handle);
@@ -6915,7 +6950,7 @@ _dispatch_runloop_root_queue_wakeup_4CF(dispatch_queue_t dq)
 	_dispatch_runloop_queue_wakeup(upcast(dq)._dl, 0, false);
 }
 
-#if TARGET_OS_MAC || defined(_WIN32)
+#if TARGET_OS_MAC || defined(_WIN32) || defined(__OpenBSD__)
 dispatch_runloop_handle_t
 _dispatch_runloop_root_queue_get_port_4CF(dispatch_queue_t dq)
 {
@@ -7013,6 +7048,7 @@ _dispatch_sig_thread(void *ctxt DISPATCH_UNUSED)
 	_dispatch_clear_stack(0);
 #if defined(_WIN32)
 	Sleep(INFINITE);
+	__builtin_unreachable();
 #else
 	_dispatch_sigsuspend();
 #endif
@@ -7304,6 +7340,13 @@ static inline pid_t
 _gettid(void)
 {
 	return (pid_t)pthread_getthreadid_np();
+}
+#elif defined(__OpenBSD__)
+DISPATCH_ALWAYS_INLINE
+static inline pid_t
+_gettid(void)
+{
+	return getthrid();
 }
 #elif defined(_WIN32)
 DISPATCH_ALWAYS_INLINE

@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 import CDispatch
-import _SwiftDispatchOverlayShims
+@_implementationOnly import _DispatchOverlayShims
 
 // This file contains declarations that are provided by the
 // importer via Dispatch.apinote when the platform has Objective-C support
@@ -44,7 +44,7 @@ public class DispatchObject {
 }
 
 
-public class DispatchGroup : DispatchObject {
+public class DispatchGroup : DispatchObject, @unchecked Sendable {
 	internal let __wrapped:dispatch_group_t;
 
 	final internal override func wrapped() -> dispatch_object_t {
@@ -68,7 +68,7 @@ public class DispatchGroup : DispatchObject {
 	}
 }
 
-public class DispatchSemaphore : DispatchObject {
+public class DispatchSemaphore : DispatchObject, @unchecked Sendable {
 	internal let __wrapped: dispatch_semaphore_t;
 
 	final internal override func wrapped() -> dispatch_object_t {
@@ -84,8 +84,8 @@ public class DispatchSemaphore : DispatchObject {
 	}
 }
 
-public class DispatchIO : DispatchObject {
-	internal let __wrapped:dispatch_io_t
+public class DispatchIO : DispatchObject, @unchecked Sendable {
+	internal let __wrapped: dispatch_io_t
 
 	final internal override func wrapped() -> dispatch_object_t {
 		return unsafeBitCast(__wrapped, to: dispatch_object_t.self)
@@ -127,7 +127,7 @@ public class DispatchIO : DispatchObject {
 	}
 }
 
-public class DispatchQueue : DispatchObject {
+public class DispatchQueue : DispatchObject, @unchecked Sendable {
 	internal let __wrapped:dispatch_queue_t;
 
 	final internal override func wrapped() -> dispatch_object_t {
@@ -156,6 +156,7 @@ public class DispatchQueue : DispatchObject {
 }
 
 public class DispatchSource : DispatchObject,
+	@unchecked Sendable,
 	DispatchSourceProtocol,	DispatchSourceRead,
 	DispatchSourceSignal, DispatchSourceTimer,
 	DispatchSourceUserDataAdd, DispatchSourceUserDataOr,
@@ -181,7 +182,7 @@ extension DispatchSource : DispatchSourceMachSend,
 }
 #endif
 
-#if !os(Linux) && !os(Android) && !os(Windows)
+#if !os(Linux) && !os(Android) && !os(Windows) && !os(OpenBSD)
 extension DispatchSource : DispatchSourceProcess,
 	DispatchSourceFileSystemObject {
 }
@@ -272,7 +273,7 @@ public protocol DispatchSourceMemoryPressure : DispatchSourceProtocol {
 }
 #endif
 
-#if !os(Linux) && !os(Android) && !os(Windows)
+#if !os(Linux) && !os(Android) && !os(Windows) && !os(OpenBSD)
 public protocol DispatchSourceProcess : DispatchSourceProtocol {
 	var handle: pid_t { get }
 
@@ -302,7 +303,7 @@ public protocol DispatchSourceTimer : DispatchSourceProtocol {
 	func scheduleRepeating(wallDeadline: DispatchWallTime, interval: Double, leeway: DispatchTimeInterval)
 }
 
-#if !os(Linux) && !os(Android) && !os(Windows)
+#if !os(Linux) && !os(Android) && !os(Windows) && !os(OpenBSD)
 public protocol DispatchSourceFileSystemObject : DispatchSourceProtocol {
 	var handle: Int32 { get }
 

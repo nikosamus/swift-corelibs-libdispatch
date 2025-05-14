@@ -32,7 +32,7 @@
 #endif
 
 #if !defined(_WIN32)
-#include <sys/signal.h>
+#include <signal.h>
 #endif
 
 DISPATCH_ASSUME_NONNULL_BEGIN
@@ -54,7 +54,7 @@ DISPATCH_ASSUME_NONNULL_BEGIN
  * Dispatch sources are used to automatically submit event handler blocks to
  * dispatch queues in response to external events.
  */
-DISPATCH_SOURCE_DECL(dispatch_source);
+DISPATCH_SOURCE_DECL(dispatch_source)
 
 __BEGIN_DECLS
 
@@ -770,4 +770,4 @@ __END_DECLS
 
 DISPATCH_ASSUME_NONNULL_END
 
-#endif
+#endif /* __DISPATCH_SOURCE__ */

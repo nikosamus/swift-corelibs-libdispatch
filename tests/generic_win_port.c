@@ -188,7 +188,7 @@ gettimeofday(struct timeval *tp, void *tzp)
 typedef void (WINAPI *QueryUnbiasedInterruptTimePreciseT)(PULONGLONG);
 static QueryUnbiasedInterruptTimePreciseT QueryUnbiasedInterruptTimePrecisePtr;
 
-static BOOL
+static BOOL WINAPI
 mach_absolute_time_init(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *lpContext)
 {
 	// QueryUnbiasedInterruptTimePrecise() is declared in the Windows headers
@@ -238,6 +238,7 @@ randomize_name(char *out)
 	}
 }
 
+#ifndef HAVE_MKSTEMP
 dispatch_fd_t
 mkstemp(char *tmpl)
 {
@@ -257,6 +258,7 @@ mkstemp(char *tmpl)
 	errno = EEXIST;
 	return -1;
 }
+#endif
 
 void
 print_winapi_error(const char *function_name, DWORD error)

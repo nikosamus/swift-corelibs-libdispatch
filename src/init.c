@@ -24,6 +24,9 @@
 // NOTE: this file must not contain any atomic operations
 
 #include "internal.h"
+#if __linux__
+#include <linux/limits.h> // for PATH_MAX
+#endif
 
 #if HAVE_MACH
 #include "protocolServer.h"
@@ -928,14 +931,14 @@ _dispatch_fault(const char *reason, const char *fmt, ...)
 	})
 
 void
-_dispatch_bug(size_t line, long val)
+_dispatch_bug(size_t line, uintptr_t val)
 {
 	dispatch_once_f(&_dispatch_build_pred, NULL, _dispatch_build_init);
 
 	if (_dispatch_bug_log_is_repeated()) return;
 
-	_dispatch_log("BUG in libdispatch: %s - %lu - 0x%lx",
-			_dispatch_build, (unsigned long)line, val);
+	_dispatch_log("BUG in libdispatch: %s - %lu - 0x%llx",
+			_dispatch_build, (unsigned long)line, (unsigned long long)val);
 }
 
 #if HAVE_MACH
@@ -961,7 +964,6 @@ _dispatch_continuation_get_function_symbol(dispatch_continuation_t dc)
 	return dc->dc_func;
 }
 
-#if HAVE_MACH
 void
 _dispatch_bug_kevent_client(const char *msg, const char *filter,
 		const char *operation, int err, uint64_t ident, uint64_t udata,
@@ -1005,7 +1007,6 @@ _dispatch_bug_kevent_client(const char *msg, const char *filter,
 				msg, strerror(err), err, udata, filter, ident, ident, func);
 	}
 }
-#endif // HAVE_MACH
 
 #if RDAR_49023449
 
@@ -1048,7 +1049,7 @@ _dispatch_bug_kevent_vanished(dispatch_unote_t du)
 			"{ %p[%s], ident: %" PRIdPTR " / 0x%" PRIxPTR ", handler: %p }",
 			dux_type(du._du)->dst_kind, dou._dq,
 			dou._dq->dq_label ? dou._dq->dq_label : "<unknown>",
-			du._du->du_ident, du._du->du_ident, func);
+			(intptr_t)du._du->du_ident, (uintptr_t)du._du->du_ident, func);
 }
 
 #endif // RDAR_49023449
@@ -1063,7 +1064,7 @@ _dispatch_bug_deprecated(const char *msg)
 }
 
 void
-_dispatch_abort(size_t line, long val)
+_dispatch_abort(size_t line, uintptr_t val)
 {
 	_dispatch_bug(line, val);
 	abort();
@@ -1147,14 +1148,14 @@ _dispatch_logv_init(void *context DISPATCH_UNUSED)
 					szProgramName, GetCurrentProcessId(), tv.tv_sec,
 					(int)tv.tv_usec);
 			if (len > 0) {
-				len = MIN(len, sizeof(szMessage) - 1);
+				len = MIN(len, (int)sizeof(szMessage) - 1);
 				_write(dispatch_logfile, szMessage, len);
 				_write(dispatch_logfile, "\n", 1);
 			}
 #else
 			dprintf(dispatch_logfile, "=== log file opened for %s[%u] at "
 					"%ld.%06u ===\n", getprogname() ?: "", getpid(),
-					tv.tv_sec, (int)tv.tv_usec);
+					(long)tv.tv_sec, (int)tv.tv_usec);
 #endif
 		}
 	}
